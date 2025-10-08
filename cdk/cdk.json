@@ -1,0 +1,10 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "env": "dev",
+    "main_bucket_name": "dev-main-bucket",
+    "log_bucket_name": "dev-log-bucket",
+    "instance_type": "t3.xlarge",
+    "nat_gateways": 1
+  }
+}

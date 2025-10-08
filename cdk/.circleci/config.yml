@@ -1,0 +1,38 @@
+version: 2.1
+
+orbs:
+  python: circleci/python@2.1.1
+  aws-cli: circleci/aws-cli@4.1.2
+
+jobs:
+  deploy:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - run:
+          name: Setup Python & install CDK
+          command: |
+            cd cdk
+            python -m venv .venv
+            . .venv/bin/activate
+            pip install -r requirements.txt
+            pip install aws-cdk-lib constructs
+      - run:
+          name: Bootstrap & deploy stack
+          command: |
+            cd cdk
+            . .venv/bin/activate
+            cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
+            cdk deploy --require-approval never \
+              -c env=$ENV_NAME \
+              -c main_bucket_name=$MAIN_BUCKET_NAME \
+              -c log_bucket_name=$LOG_BUCKET_NAME \
+              -c instance_type=$INSTANCE_TYPE \
+              -c nat_gateways=$NAT_GATEWAYS
+
+workflows:
+  deploy_flow:
+    jobs:
+      - deploy:
+          context: prod
