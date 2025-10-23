@@ -41,3 +41,29 @@ jobs:
               -c instance_type=$INSTANCE_TYPE \
               -c nat_gateways=$NAT_GATEWAYS \
               --require-approval never
+
+# 👇 Workflow controls how jobs run in sequence
+workflows:
+  deploy_flow:
+    jobs:
+      - deploy:
+          name: Deploy to Dev
+          env_name: "dev"
+          filters:
+            branches:
+              only: main  # or your dev branch
+
+      # ⏸️ Manual approval step
+      - hold-for-approval:
+          type: approval
+          requires:
+            - Deploy to Dev
+
+      - deploy:
+          name: Deploy to Prod
+          env_name: "prod"
+          requires:
+            - hold-for-approval
+          filters:
+            branches:
+              only: main
