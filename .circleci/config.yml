@@ -2,7 +2,6 @@ version: 2.1
 
 orbs:
   python: circleci/python@2.1.1
-  aws-cli: circleci/aws-cli@4.1.2
 
 jobs:
   deploy:
@@ -14,7 +13,37 @@ jobs:
     steps:
       - checkout
 
-      # 👇 Manually assume role via OIDC
+      # ⚡ Cache AWS CLI & CDK to speed up future builds
+      - restore_cache:
+          keys:
+            - awscli-cdk-v1
+
+      - run:
+          name: Install AWS CLI and CDK (cached)
+          command: |
+            # Install AWS CLI if missing
+            if ! command -v aws &> /dev/null; then
+              echo "Installing AWS CLI..."
+              sudo apt-get update -y && sudo apt-get install -y awscli
+            else
+              echo "AWS CLI already installed"
+            fi
+
+            # Install AWS CDK globally if missing
+            if ! command -v cdk &> /dev/null; then
+              echo "Installing AWS CDK globally..."
+              sudo npm install -g aws-cdk
+            else
+              echo "AWS CDK already installed"
+            fi
+
+      - save_cache:
+          key: awscli-cdk-v1
+          paths:
+            - /usr/bin/aws
+            - /usr/local/lib/node_modules/aws-cdk
+
+      # 🧩 Assume AWS Role via OIDC
       - run:
           name: Assume AWS OIDC Role
           command: |
@@ -24,8 +53,9 @@ jobs:
             export AWS_REGION="${AWS_REGION}"
             aws sts get-caller-identity
 
+      # 🐍 Python setup for CDK
       - run:
-          name: Setup Python & install CDK
+          name: Setup Python & install dependencies
           command: |
             cd cdk
             python -m venv .venv
@@ -33,6 +63,7 @@ jobs:
             pip install -r requirements.txt
             pip install aws-cdk-lib constructs
 
+      # 🚀 Deploy Stack
       - run:
           name: Bootstrap & deploy stack
           command: |
@@ -47,6 +78,7 @@ jobs:
               -c nat_gateways=$NAT_GATEWAYS \
               --require-approval never
 
+# 🧭 Workflow: Dev → Approval → Prod
 workflows:
   deploy_flow:
     jobs:
