@@ -28,7 +28,12 @@ jobs:
               exit 1
             fi
             echo "$TOKEN" | cut -d. -f2 | base64 -d | jq '{aud, sub, iss}'
-
+            echo ""
+            echo "🔍 Listing AWS OIDC providers (for verification)..."
+            aws iam list-open-id-connect-providers || {
+              echo "❌ Failed to list OIDC providers. Ensure AWS CLI is configured or IAM permissions allow it."
+              exit 1
+            }
       # ✅ Assume AWS OIDC Role using aws-cli/setup (official pattern)
       - aws-cli/setup:
           role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole"
