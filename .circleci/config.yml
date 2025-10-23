@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   python: circleci/python@2.1.1
+  aws-cli: circleci/aws-cli@4.1.2
 
 jobs:
   deploy:
@@ -13,84 +14,14 @@ jobs:
     steps:
       - checkout
 
-      # ⚡ Cache AWS CLI & CDK to speed up future builds
-      - restore_cache:
-          keys:
-            - awscli-cdk-v1
+      # ✅ Setup AWS credentials via OIDC
+      - aws-cli/setup:
+          role-arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole
+          region: ${AWS_REGION}
 
+      # 🐍 Setup Python & install dependencies
       - run:
-          name: Install AWS CLI and CDK (cached)
-          command: |
-            # Install AWS CLI if missing
-            if ! command -v aws &> /dev/null; then
-              echo "Installing AWS CLI..."
-              sudo apt-get update -y && sudo apt-get install -y awscli
-            else
-              echo "AWS CLI already installed"
-            fi
-
-            # --- Install Node.js + npm if missing (for CDK CLI) ---
-            if ! command -v npm &> /dev/null; then
-              echo "Installing Node.js + npm..."
-              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-              sudo apt-get install -y nodejs
-            else
-              echo "Node.js already installed"
-            fi
-
-            # Install AWS CDK globally if missing
-            if ! command -v cdk &> /dev/null; then
-              echo "Installing AWS CDK globally..."
-              sudo npm install -g aws-cdk
-            else
-              echo "AWS CDK already installed"
-            fi
-
-      - save_cache:
-          key: awscli-cdk-v1
-          paths:
-            - /usr/bin/aws
-            - /usr/local/lib/node_modules/aws-cdk
-
-      # 🧩 Assume AWS Role via OIDC
-      - run:
-          name: Debug CircleCI OIDC Token
-          command: |
-            echo "🔍 Checking CircleCI OIDC Token availability..."
-            if [ -z "${CIRCLE_OIDC_TOKEN_FILE}" ]; then
-              echo "❌ CIRCLE_OIDC_TOKEN_FILE is not set. OIDC may not be enabled for this project."
-              exit 1
-            fi
-
-            echo "✅ Token file path: $CIRCLE_OIDC_TOKEN_FILE"
-            echo "🔑 Token file exists? $(test -f "$CIRCLE_OIDC_TOKEN_FILE" && echo yes || echo no)"
-            echo ""
-            echo "🔓 Decoding token header and payload..."
-
-            # Install jq and coreutils for base64 decoding
-            sudo apt-get update -y && sudo apt-get install -y jq coreutils
-
-            # Decode header
-            head -n1 "$CIRCLE_OIDC_TOKEN_FILE" | cut -d. -f1 | base64 --decode 2>/dev/null || true
-            echo ""
-            echo "---"
-
-            # Decode payload
-            head -n1 "$CIRCLE_OIDC_TOKEN_FILE" | cut -d. -f2 | base64 --decode 2>/dev/null | jq .
-            echo ""
-            echo "✅ End of OIDC Token Debug"
-      - run:
-          name: Assume AWS OIDC Role
-          command: |
-            echo "Assuming role via OIDC..."
-            export AWS_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole"
-            export AWS_WEB_IDENTITY_TOKEN_FILE="${CIRCLE_OIDC_TOKEN_FILE}"
-            export AWS_REGION="${AWS_REGION}"
-            aws sts get-caller-identity
-
-      # 🐍 Python setup for CDK
-      - run:
-          name: Setup Python & install dependencies
+          name: Setup Python & install CDK
           command: |
             cd cdk
             python -m venv .venv
@@ -113,7 +44,6 @@ jobs:
               -c nat_gateways=$NAT_GATEWAYS \
               --require-approval never
 
-# 🧭 Workflow: Dev → Approval → Prod
 workflows:
   deploy_flow:
     jobs:
