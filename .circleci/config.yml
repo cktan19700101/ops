@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   python: circleci/python@2.1.1
-  aws-cli: circleci/aws-cli@5.1.1   # ✅ Newer orb with OIDC support
+  aws-cli: circleci/aws-cli@3.1.5  # ✅ Newer orb with OIDC support
 
 jobs:
   deploy:
@@ -24,16 +24,6 @@ jobs:
           role_session_name: "circleci-session"
           session_duration: "3600"
 
-      - run:
-          name: Inspect OIDC token
-          command: |
-            echo "Decoding CircleCI OIDC token..."
-            if [ -z "$CIRCLE_OIDC_TOKEN_FILE" ]; then
-              echo "❌ OIDC token not present - org may not support OIDC"
-              exit 1
-            fi
-            cat $CIRCLE_OIDC_TOKEN_FILE | cut -d. -f2 | base64 -d | jq '{aud, sub, iss}'
-      # 🧩 Optional sanity check (verifies OIDC + role works)
       - run:
           name: Verify AWS Identity
           command: aws sts get-caller-identity
