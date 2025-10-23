@@ -18,7 +18,9 @@ jobs:
       - run:
           name: 🔍 Inspect CircleCI OIDC Token
           command: |
-            echo "Decoding CircleCI OIDC token..."
+            echo "🔍 Decoding CircleCI OIDC token..."
+            
+            # Pick token source
             if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
               TOKEN="$CIRCLE_OIDC_TOKEN_V2"
             elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
@@ -27,7 +29,10 @@ jobs:
               echo "❌ No OIDC token found."
               exit 1
             fi
-            echo "$TOKEN" | cut -d. -f2 | base64 -d | jq '{aud, sub, iss}'
+
+            # Decode payload (Base64URL safe, ignore errors)
+            echo "$TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode --ignore-garbage 2>/dev/null | jq '{aud, sub, iss}' || true
+
             echo ""
             echo "🔍 Listing AWS OIDC providers (for verification)..."
             aws iam list-open-id-connect-providers || {
