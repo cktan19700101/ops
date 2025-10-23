@@ -17,7 +17,7 @@ jobs:
       # ✅ Setup AWS credentials via OIDC
       - aws-cli/setup:
           role-arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole
-          region: ap-southeast-1
+          aws-region: ap-southeast-1
 
       # 🐍 Setup Python & install dependencies
       - run:
