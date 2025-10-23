@@ -24,6 +24,15 @@ jobs:
           role_session_name: "circleci-session"
           session_duration: "3600"
 
+      - run:
+          name: Inspect OIDC token
+          command: |
+            echo "Decoding CircleCI OIDC token..."
+            if [ -z "$CIRCLE_OIDC_TOKEN_FILE" ]; then
+              echo "❌ OIDC token not present - org may not support OIDC"
+              exit 1
+            fi
+            cat $CIRCLE_OIDC_TOKEN_FILE | cut -d. -f2 | base64 -d | jq '{aud, sub, iss}'
       # 🧩 Optional sanity check (verifies OIDC + role works)
       - run:
           name: Verify AWS Identity
