@@ -1,12 +1,13 @@
 import os
 from aws_cdk import (
     Stack,
+    RemovalPolicy,  # ← add this
     aws_s3 as s3,
     aws_ec2 as ec2,
     aws_iam as iam,
 )
 from constructs import Construct
-
+import boto3
 
 class BaseStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs):
@@ -14,18 +15,12 @@ class BaseStack(Stack):
 
         # --- Context or environment variables ---
         env_name = self.node.try_get_context("env") or os.getenv("ENV_NAME", "dev")
-        region = self.region
-        account = self.account
+        account = os.getenv("CDK_DEFAULT_ACCOUNT") or boto3.client("sts").get_caller_identity()["Account"]
+        region = os.getenv("CDK_DEFAULT_REGION") or 'ap-southeast-1'
 
-        main_bucket_name = (
-            self.node.try_get_context("main_bucket_name")
-            or os.getenv("MAIN_BUCKET_NAME", f"{env_name}-main-bucket-{account}")
-        )
+        main_bucket_name = f"{env_name}-main-bucket-{account}"
 
-        log_bucket_name = (
-            self.node.try_get_context("log_bucket_name")
-            or os.getenv("LOG_BUCKET_NAME", f"{env_name}-log-bucket-{account}")
-        )
+        log_bucket_name = f"{env_name}-log-bucket-{account}"
 
         instance_type_str = (
             self.node.try_get_context("instance_type")
@@ -43,7 +38,7 @@ class BaseStack(Stack):
             "MainBucket",
             bucket_name=main_bucket_name,
             versioned=True,
-            removal_policy=s3.RemovalPolicy.DESTROY,
+            removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
         )
 
@@ -52,8 +47,6 @@ class BaseStack(Stack):
             "LogBucket",
             bucket_name=log_bucket_name,
             versioned=False,
-            removal_policy=s3.RemovalPolicy.DESTROY,
+            removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
         )
-
-        # 2. VPC (isolated subnets, 1 NAT gateway defaul

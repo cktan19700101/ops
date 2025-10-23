@@ -8,8 +8,17 @@ jobs:
   deploy:
     docker:
       - image: cimg/python:3.11
+    parameters:
+      env_name:
+        type: string
     steps:
       - checkout
+
+      - aws-cli/setup:
+          role-arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole
+          role-session-name: circleci-infra
+          region: ${AWS_REGION}
+
       - run:
           name: Setup Python & install CDK
           command: |
@@ -18,21 +27,17 @@ jobs:
             . .venv/bin/activate
             pip install -r requirements.txt
             pip install aws-cdk-lib constructs
+
       - run:
           name: Bootstrap & deploy stack
           command: |
             cd cdk
             . .venv/bin/activate
             cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
-            cdk deploy --require-approval never \
-              -c env=$ENV_NAME \
+            cdk deploy \
+              -c env=<< parameters.env_name >> \
               -c main_bucket_name=$MAIN_BUCKET_NAME \
               -c log_bucket_name=$LOG_BUCKET_NAME \
               -c instance_type=$INSTANCE_TYPE \
-              -c nat_gateways=$NAT_GATEWAYS
-
-workflows:
-  deploy_flow:
-    jobs:
-      - deploy:
-          context: prod
+              -c nat_gateways=$NAT_GATEWAYS \
+              --require-approval never

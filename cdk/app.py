@@ -5,12 +5,12 @@ from stacks.base_stack import BaseStack
 app = cdk.App()
 
 # Allow region/account to be auto-detected from environment
+env_name = app.node.try_get_context("env") or "dev"
+
 BaseStack(
     app,
-    "OpsBaseStack",
+    f"OpsStack-{env_name}",
     env=cdk.Environment(
-        account=cdk.Aws.ACCOUNT_ID,
-        region=cdk.Aws.REGION
     ),
 )
 

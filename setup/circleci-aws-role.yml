@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircleCI OIDC roles for infra and app deployments
+
+Parameters:
+  AccountId:
+    Type: String
+    Description: AWS Account ID where these roles will be created
+  CircleCIOrgId:
+    Type: String
+    Description: CircleCI Organization ID (required)
+  CircleCIProjectId:
+    Type: String
+    Description: CircleCI Project ID (required)
+
+Conditions:
+  HasAllParams:
+    !And
+      - !Not [!Equals [!Ref AccountId, ""]]
+      - !Not [!Equals [!Ref CircleCIOrgId, ""]]
+      - !Not [!Equals [!Ref CircleCIProjectId, ""]]
+
+Resources:
+  CircleCIOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: HasAllParams
+    Properties:
+      Url: !Sub "https://oidc.circleci.com/org/${CircleCIOrgId}"
+      ClientIdList:
+        - "https://circleci.com"
+      ThumbprintList:
+        - "9e99a48a9960b14926bb7f3b02e22da0afd10df6"
+
+  CircleCIInfraRole:
+    Type: AWS::IAM::Role
+    Condition: HasAllParams
+    Properties:
+      RoleName: CircleCIInfraRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt CircleCIOIDCProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                oidc.circleci.com/org/${CircleCIOrgId}:aud: "https://circleci.com"
+                oidc.circleci.com/org/${CircleCIOrgId}:sub: !Sub "org/${CircleCIOrgId}/project/${CircleCIProjectId}/user/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      MaxSessionDuration: 3600
+      Description: CircleCI Infra role for provisioning CDK stacks and AWS resources
+
+  CircleCIAppRole:
+    Type: AWS::IAM::Role
+    Condition: HasAllParams
+    Properties:
+      RoleName: CircleCIAppRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt CircleCIOIDCProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                oidc.circleci.com/org/${CircleCIOrgId}:aud: "https://circleci.com"
+                oidc.circleci.com/org/${CircleCIOrgId}:sub: !Sub "org/${CircleCIOrgId}/project/${CircleCIProjectId}/user/*"
+      Policies:
+        - PolicyName: CircleCIAppDeploymentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - s3:PutObject
+                  - s3:GetObject
+                  - ecs:UpdateService
+                  - cloudfront:CreateInvalidation
+                  - ssm:GetParameter
+                  - ssm:GetParametersByPath
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+      MaxSessionDuration: 3600
+      Description: CircleCI App deployment role with scoped permissions
+
+Outputs:
+  InfraRoleArn:
+    Description: ARN of the CircleCI Infra Role
+    Value: !GetAtt CircleCIInfraRole.Arn
+  AppRoleArn:
+    Description: ARN of the CircleCI App Role
+    Value: !GetAtt CircleCIAppRole.Arn
