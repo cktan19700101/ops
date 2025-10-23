@@ -10,7 +10,6 @@ jobs:
     parameters:
       env_name:
         type: string
-    oidc: true
     steps:
       - checkout
 
@@ -95,6 +94,7 @@ workflows:
       - deploy:
           name: Deploy to Dev
           env_name: "dev"
+          oidc: true
           filters:
             branches:
               only: main
@@ -107,6 +107,7 @@ workflows:
       - deploy:
           name: Deploy to Prod
           env_name: "prod"
+          oidc: true
           requires:
             - hold-for-approval
           filters:
