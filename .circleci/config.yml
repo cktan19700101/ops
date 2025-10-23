@@ -29,6 +29,15 @@ jobs:
               echo "AWS CLI already installed"
             fi
 
+            # --- Install Node.js + npm if missing (for CDK CLI) ---
+            if ! command -v npm &> /dev/null; then
+              echo "Installing Node.js + npm..."
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            else
+              echo "Node.js already installed"
+            fi
+
             # Install AWS CDK globally if missing
             if ! command -v cdk &> /dev/null; then
               echo "Installing AWS CDK globally..."
