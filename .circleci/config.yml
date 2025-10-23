@@ -10,6 +10,7 @@ jobs:
     parameters:
       env_name:
         type: string
+    oidc: true
     steps:
       - checkout
 
