@@ -15,6 +15,19 @@ jobs:
         type: string
     steps:
       - checkout
+      - run:
+          name: 🔍 Inspect CircleCI OIDC Token
+          command: |
+            echo "Decoding CircleCI OIDC token..."
+            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
+              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
+            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
+              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
+            else
+              echo "❌ No OIDC token found."
+              exit 1
+            fi
+            echo "$TOKEN" | cut -d. -f2 | base64 -d | jq '{aud, sub, iss}'
 
       # ✅ Assume AWS OIDC Role using aws-cli/setup (official pattern)
       - aws-cli/setup:
