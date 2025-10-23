@@ -54,6 +54,32 @@ jobs:
 
       # 🧩 Assume AWS Role via OIDC
       - run:
+          name: Debug CircleCI OIDC Token
+          command: |
+            echo "🔍 Checking CircleCI OIDC Token availability..."
+            if [ -z "${CIRCLE_OIDC_TOKEN_FILE}" ]; then
+              echo "❌ CIRCLE_OIDC_TOKEN_FILE is not set. OIDC may not be enabled for this project."
+              exit 1
+            fi
+
+            echo "✅ Token file path: $CIRCLE_OIDC_TOKEN_FILE"
+            echo "🔑 Token file exists? $(test -f "$CIRCLE_OIDC_TOKEN_FILE" && echo yes || echo no)"
+            echo ""
+            echo "🔓 Decoding token header and payload..."
+
+            # Install jq and coreutils for base64 decoding
+            sudo apt-get update -y && sudo apt-get install -y jq coreutils
+
+            # Decode header
+            head -n1 "$CIRCLE_OIDC_TOKEN_FILE" | cut -d. -f1 | base64 --decode 2>/dev/null || true
+            echo ""
+            echo "---"
+
+            # Decode payload
+            head -n1 "$CIRCLE_OIDC_TOKEN_FILE" | cut -d. -f2 | base64 --decode 2>/dev/null | jq .
+            echo ""
+            echo "✅ End of OIDC Token Debug"
+      - run:
           name: Assume AWS OIDC Role
           command: |
             echo "Assuming role via OIDC..."
