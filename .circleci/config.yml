@@ -10,6 +10,16 @@ jobs:
       - image: cimg/base:stable  # lightweight; includes curl, jq, etc.
     steps:
       - run:
+          name: 🛠️ Token sanity check
+          command: |
+            echo "🔍 Checking for CircleCI OIDC token..."
+            echo "$CIRCLE_OIDC_TOKEN" | cut -d "." -f2 | base64 -d | jq .
+            echo "🔍 Decoding token claims..."
+            echo "$CIRCLE_OIDC_TOKEN" \
+              | awk -F. '{print $2}' \
+              | base64 -d 2>/dev/null \
+              | jq '{iss, aud, sub}'
+      - run:
           name: 🔍 Decode CircleCI OIDC Token
           command: |
             echo "🔍 Checking for CircleCI OIDC token..."
