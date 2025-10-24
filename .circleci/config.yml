@@ -62,7 +62,6 @@ jobs:
           region: "ap-southeast-1"
           profile_name: "oidc-test"
           session_duration: "3600"
-          audience: "571ba275-5a8b-419f-8907-68152a62a225"
 
       # 4️⃣ Verify AWS credentials after orb setup
       - run:
