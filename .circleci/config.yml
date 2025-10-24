@@ -57,11 +57,11 @@ jobs:
 
       # 3️⃣ Configure AWS CLI with OIDC (official orb)
       - aws-cli/setup:
-          role-arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
-          role-session-name: "circleci-oidc-test"
+          role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
+          role_session_name: "circleci-oidc-test"
           region: "ap-southeast-1"
-          profile-name: "oidc-test"
-          session-duration: "3600"
+          profile_name: "oidc-test"
+          session_duration: "3600"
 
       # 4️⃣ Verify AWS credentials after orb setup
       - run:
