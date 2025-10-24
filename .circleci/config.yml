@@ -1,26 +1,18 @@
+# 
 version: 2.1
 
 orbs:
-  python: circleci/python@2.1.1
-  aws-cli: circleci/aws-cli@5.1.1  # ✅ Newer orb with OIDC support
+  aws-cli: circleci/aws-cli@5.1.1
 
 jobs:
-  deploy:
+  test-oidc:
     docker:
-      - image: cimg/python:3.11
-    environment:
-      AWS_REGION: ap-southeast-1
-    parameters:
-      env_name:
-        type: string
+      - image: cimg/base:stable  # lightweight; includes curl, jq, etc.
     steps:
-      - checkout
       - run:
-          name: 🔍 Inspect CircleCI OIDC Token
+          name: 🔍 Decode CircleCI OIDC Token
           command: |
-            echo "🔍 Decoding CircleCI OIDC token..."
-            
-            # Pick token source
+            echo "🔍 Checking for CircleCI OIDC token..."
             if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
               TOKEN="$CIRCLE_OIDC_TOKEN_V2"
             elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
@@ -30,72 +22,30 @@ jobs:
               exit 1
             fi
 
-            # Decode payload (Base64URL safe, ignore errors)
-            echo "$TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode --ignore-garbage 2>/dev/null | jq '{aud, sub, iss}' || true
+            echo ""
+            echo "🔍 Decoding token payload..."
+            echo "$TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode --ignore-garbage | jq '{aud, sub, iss}' || true
 
             echo ""
-            echo "🔍 Listing AWS OIDC providers (for verification)..."
-            aws iam list-open-id-connect-providers || {
-              echo "❌ Failed to list OIDC providers. Ensure AWS CLI is configured or IAM permissions allow it."
-              exit 1
-            }
-      # ✅ Assume AWS OIDC Role using aws-cli/setup (official pattern)
+            echo "✅ Token detected and decoded successfully."
+
       - aws-cli/setup:
-          role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/CircleCIInfraRole"
-          region:  ${AWS_REGION}
-          profile_name: "OIDC-PROFILE"
-          role_session_name: "circleci-session"
+          role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
+          role_session_name: "circleci-oidc-test"
+          region: "ap-southeast-1"
+          profile_name: "oidc-test"
           session_duration: "3600"
 
       - run:
-          name: Verify AWS Identity
-          command: aws sts get-caller-identity
-
-      # 🐍 Setup Python & install dependencies
-      - run:
-          name: Setup Python & install CDK
+          name: 🧠 Verify AWS Identity
           command: |
-            cd cdk
-            python -m venv .venv
-            . .venv/bin/activate
-            pip install -r requirements.txt
-            pip install aws-cdk-lib constructs
-
-      # 🚀 Deploy Stack
-      - run:
-          name: Bootstrap & deploy stack
-          command: |
-            cd cdk
-            . .venv/bin/activate
-            cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
-            cdk deploy \
-              -c env=<< parameters.env_name >> \
-              -c main_bucket_name=$MAIN_BUCKET_NAME \
-              -c log_bucket_name=$LOG_BUCKET_NAME \
-              -c instance_type=$INSTANCE_TYPE \
-              -c nat_gateways=$NAT_GATEWAYS \
-              --require-approval never
+            echo "🔍 Calling STS get-caller-identity..."
+            aws sts get-caller-identity --profile oidc-test || {
+              echo "❌ Failed to assume role."
+              exit 1
+            }
 
 workflows:
-  deploy_flow:
+  verify-oidc:
     jobs:
-      - deploy:
-          name: Deploy to Dev
-          env_name: "dev"
-          filters:
-            branches:
-              only: main
-
-      - hold-for-approval:
-          type: approval
-          requires:
-            - Deploy to Dev
-
-      - deploy:
-          name: Deploy to Prod
-          env_name: "prod"
-          requires:
-            - hold-for-approval
-          filters:
-            branches:
-              only: main
+      - test-oidc
