@@ -21,16 +21,6 @@ jobs:
               echo "❌ No OIDC token found."
               exit 1
             fi
-
-            echo ""
-            echo "🔍 Decoding token payload..."
-            echo "$TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode --ignore-garbage | jq '{aud, sub, iss}' || true
-
-            echo ""
-            echo "✅ Token detected and decoded successfully."
-            echo "$CIRCLE_OIDC_TOKEN_V2" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode --ignore-garbage | jq '{aud, sub, iss}'
-
-
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-oidc-test"
