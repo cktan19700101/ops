@@ -28,7 +28,6 @@ jobs:
           region: "ap-southeast-1"
           profile_name: "oidc-test"
           session_duration: "3600"
-          use_oidc: true   # <---- ensure CircleCI injects OIDC token
 
       - run:
           name: 🔍 Decode CircleCI OIDC Token
