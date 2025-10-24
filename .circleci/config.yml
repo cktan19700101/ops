@@ -7,13 +7,13 @@ orbs:
 jobs:
   test-oidc:
     docker:
-      - image: cimg/base:stable  # Includes curl, jq, bash, base64, etc.
+      - image: cimg/base:stable  # Includes curl, jq, bash, base64
 
     steps:
       - checkout
 
       - run:
-          name: 🔧 Preflight Environment Check
+          name: 🔧 Environment Info
           command: |
             echo "✅ CircleCI Environment:"
             echo "  ORG ID:      $CIRCLE_ORGANIZATION_ID"
@@ -22,47 +22,70 @@ jobs:
             echo "  BRANCH:      $CIRCLE_BRANCH"
             echo "----------------------------------------"
 
+      # 🔑 Step 1: Explicitly request the OIDC token manually
+      - run:
+          name: 🔑 Request CircleCI OIDC Token
+          command: |
+            echo "🔍 Requesting OIDC token manually from CircleCI..."
+
+            TOKEN_URL="https://oidc.circleci.com/org/${CIRCLE_ORGANIZATION_ID}/project/${CIRCLE_PROJECT_ID}/token"
+            echo "Using audience: https://aws.amazon.com"
+            TOKEN=$(curl -s -X POST -d "audience=https://aws.amazon.com" "$TOKEN_URL" | jq -r '.token')
+
+            if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+              echo "❌ Failed to retrieve OIDC token from CircleCI."
+              exit 1
+            fi
+
+            echo "✅ Token successfully retrieved."
+            echo "$TOKEN" | head -c 40 && echo "..."
+
+            # Save for later steps (write to workspace or env var)
+            echo "$TOKEN" > token.jwt
+
+      # 🧠 Step 2: Decode & inspect token before touching AWS
+      - run:
+          name: 🧠 Decode & Inspect CircleCI OIDC Token
+          command: |
+            echo "----------------------------------------"
+            echo "🔍 Decoding OIDC Token (iss, aud, sub):"
+            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss, aud, sub}'
+            echo "----------------------------------------"
+
+            echo "🔍 Full token claims (for debugging only):"
+            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq .
+            echo "----------------------------------------"
+
+      # 🧾 Optional Step 3: Use AWS CLI with the token file (if you want to test)
+      - run:
+          name: ⚙️ Test AWS Role Assumption Manually
+          command: |
+            echo "🔍 Testing manual AWS STS AssumeRoleWithWebIdentity..."
+            aws sts assume-role-with-web-identity \
+              --role-arn arn:aws:iam::056198491146:role/CircleCIInfraRole \
+              --role-session-name circleci-oidc-test \
+              --web-identity-token file://token.jwt \
+              --region ap-southeast-1 || {
+                echo "❌ Role assumption failed — check 'aud' and trust policy."
+                exit 1
+              }
+
+      # 🧾 Step 4 (optional): proceed with orb after verification
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-oidc-test"
           region: "ap-southeast-1"
           profile_name: "oidc-test"
           session_duration: "3600"
+          use_oidc: true
 
       - run:
-          name: 🔍 Decode CircleCI OIDC Token
+          name: 🧠 Verify AWS Identity (after orb)
           command: |
-            echo "🔍 Looking for CircleCI OIDC token..."
-            TOKEN=""
-
-            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
-              echo "✅ Found CIRCLE_OIDC_TOKEN_V2"
-              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
-            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
-              echo "✅ Found CIRCLE_OIDC_TOKEN_FILE"
-              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
-            elif [ -n "$CIRCLE_OIDC_TOKEN" ]; then
-              echo "✅ Found legacy CIRCLE_OIDC_TOKEN"
-              TOKEN="$CIRCLE_OIDC_TOKEN"
-            else
-              echo "❌ No OIDC token found in environment."
-              exit 1
-            fi
-
-            echo "----------------------------------------"
-            echo "🧠 Decoding OIDC claims (iss, aud, sub):"
-            echo "$TOKEN" | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss, aud, sub}'
-            echo "----------------------------------------"
-
-      - run:
-          name: 🧠 Verify AWS Identity
-          command: |
-            echo "🔍 Calling STS get-caller-identity..."
             aws sts get-caller-identity --profile oidc-test || {
-              echo "❌ Failed to assume role. Check trust policy & audience."
+              echo "❌ Failed to assume role."
               exit 1
             }
-            echo "✅ Successfully assumed AWS role via OIDC!"
 
 workflows:
   verify-oidc:
