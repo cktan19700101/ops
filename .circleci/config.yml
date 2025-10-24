@@ -55,19 +55,24 @@ jobs:
             jq -R 'split(".")[1] | @base64d | fromjson' token.jwt
             echo "--------------------------------------"
 
-      # 3️⃣ Test AWS role assumption manually
+      # 3️⃣ Configure AWS CLI with OIDC (official orb)
+      - aws-cli/setup:
+          role-arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
+          role-session-name: "circleci-oidc-test"
+          region: "ap-southeast-1"
+          profile-name: "oidc-test"
+          session-duration: "3600"
+
+      # 4️⃣ Verify AWS credentials after orb setup
       - run:
-          name: ⚙️ Test AssumeRoleWithWebIdentity
+          name: 🧠 Verify AWS Identity (via orb)
           command: |
-            echo "🔍 Testing manual AWS STS AssumeRoleWithWebIdentity..."
-            aws sts assume-role-with-web-identity \
-              --role-arn arn:aws:iam::056198491146:role/CircleCIInfraRole \
-              --role-session-name circleci-oidc-test \
-              --web-identity-token file://token.jwt \
-              --region ap-southeast-1 || {
-                echo "❌ Failed to assume role. Check 'aud' or trust policy."
-                exit 1
-              }
+            echo "🔍 Verifying assumed AWS identity..."
+            aws sts get-caller-identity --profile oidc-test --region ap-southeast-1 || {
+              echo "❌ Failed to assume role via OIDC."
+              exit 1
+            }
+            echo "✅ Successfully assumed AWS role via CircleCI OIDC!"
 
 workflows:
   verify-oidc:
