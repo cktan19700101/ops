@@ -49,10 +49,10 @@ jobs:
           command: |
             echo "--------------------------------------"
             echo "🧠 Decoding iss, aud, sub claims..."
-            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss, aud, sub}'
+            jq -R 'split(".")[1] | @base64d | fromjson | {iss,aud,sub}' token.jwt
             echo "--------------------------------------"
             echo "📜 Full payload (for debug only):"
-            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq .
+            jq -R 'split(".")[1] | @base64d | fromjson' token.jwt
             echo "--------------------------------------"
 
       # 3️⃣ Test AWS role assumption manually
