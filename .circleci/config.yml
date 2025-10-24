@@ -1,43 +1,76 @@
 version: 2.1
 
 orbs:
-  oidc-token: circleci/oidc-token@1
   aws-cli: circleci/aws-cli@5.1.1
 
 jobs:
   test-oidc:
     docker:
       - image: cimg/base:stable
+
     steps:
       - checkout
 
-      # Step 1: fetch a token using the official orb
-      - oidc-token/get:
-          audience: "https://aws.amazon.com"
-          output-variable-name: CIRCLE_OIDC_TOKEN
-
-      # Step 2: decode and inspect it
       - run:
-          name: 🔍 Decode OIDC token
+          name: 🔧 Environment info
           command: |
-            echo "🔍 Decoding OIDC token..."
-            echo "$CIRCLE_OIDC_TOKEN" | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss,aud,sub}'
-            echo "—— full payload ——"
-            echo "$CIRCLE_OIDC_TOKEN" | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq .
+            echo "ORG ID:      $CIRCLE_ORGANIZATION_ID"
+            echo "PROJECT ID:  $CIRCLE_PROJECT_ID"
+            echo "USER:        $CIRCLE_USERNAME"
+            echo "BRANCH:      $CIRCLE_BRANCH"
+            echo "--------------------------------------"
 
-      # Step 3: optional manual AWS test
+      # 1️⃣ Fetch token from environment variables (CircleCI provides it automatically)
       - run:
-          name: ⚙️ Manual STS AssumeRoleWithWebIdentity
+          name: 🔑 Find CircleCI OIDC token
           command: |
-            echo "$CIRCLE_OIDC_TOKEN" > token.jwt
+            set -e
+            echo "🔍 Checking for OIDC token..."
+
+            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
+              echo "✅ Found CIRCLE_OIDC_TOKEN_V2"
+              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
+            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
+              echo "✅ Found CIRCLE_OIDC_TOKEN_FILE"
+              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
+            elif [ -n "$CIRCLE_OIDC_TOKEN" ]; then
+              echo "✅ Found legacy CIRCLE_OIDC_TOKEN"
+              TOKEN="$CIRCLE_OIDC_TOKEN"
+            else
+              echo "❌ No OIDC token found. Make sure your context has OIDC enabled."
+              exit 1
+            fi
+
+            echo "$TOKEN" > token.jwt
+
+      # 2️⃣ Decode and show key claims
+      - run:
+          name: 🧠 Decode OIDC token
+          command: |
+            echo "--------------------------------------"
+            echo "🧠 Decoding iss, aud, sub claims..."
+            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss, aud, sub}'
+            echo "--------------------------------------"
+            echo "📜 Full payload (for debug only):"
+            cat token.jwt | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq .
+            echo "--------------------------------------"
+
+      # 3️⃣ Test AWS role assumption manually
+      - run:
+          name: ⚙️ Test AssumeRoleWithWebIdentity
+          command: |
+            echo "🔍 Testing manual AWS STS AssumeRoleWithWebIdentity..."
             aws sts assume-role-with-web-identity \
               --role-arn arn:aws:iam::056198491146:role/CircleCIInfraRole \
               --role-session-name circleci-oidc-test \
               --web-identity-token file://token.jwt \
-              --region ap-southeast-1
+              --region ap-southeast-1 || {
+                echo "❌ Failed to assume role. Check 'aud' or trust policy."
+                exit 1
+              }
 
 workflows:
   verify-oidc:
     jobs:
       - test-oidc:
-          context: my-oidc-enabled-context   # 👈 ensure this context has OIDC enabled
+          context: my-oidc-enabled-context
