@@ -1,4 +1,4 @@
-# 
+# .circleci/config.yml
 version: 2.1
 
 orbs:
@@ -7,45 +7,63 @@ orbs:
 jobs:
   test-oidc:
     docker:
-      - image: cimg/base:stable  # lightweight; includes curl, jq, etc.
+      - image: cimg/base:stable  # Includes curl, jq, bash, base64, etc.
+
     steps:
+      - checkout
+
       - run:
-          name: 🛠️ Token sanity check
+          name: 🔧 Preflight Environment Check
           command: |
-            echo "🔍 Checking for CircleCI OIDC token..."
-            echo "$CIRCLE_OIDC_TOKEN" | cut -d "." -f2 | base64 -d | jq .
-            echo "🔍 Decoding token claims..."
-            echo "$CIRCLE_OIDC_TOKEN" \
-              | awk -F. '{print $2}' \
-              | base64 -d 2>/dev/null \
-              | jq '{iss, aud, sub}'
-      - run:
-          name: 🔍 Decode CircleCI OIDC Token
-          command: |
-            echo "🔍 Checking for CircleCI OIDC token..."
-            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
-              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
-            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
-              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
-            else
-              echo "❌ No OIDC token found."
-              exit 1
-            fi
+            echo "✅ CircleCI Environment:"
+            echo "  ORG ID:      $CIRCLE_ORGANIZATION_ID"
+            echo "  PROJECT ID:  $CIRCLE_PROJECT_ID"
+            echo "  USER:        $CIRCLE_USERNAME"
+            echo "  BRANCH:      $CIRCLE_BRANCH"
+            echo "----------------------------------------"
+
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-oidc-test"
           region: "ap-southeast-1"
           profile_name: "oidc-test"
           session_duration: "3600"
+          use_oidc: true   # <---- ensure CircleCI injects OIDC token
+
+      - run:
+          name: 🔍 Decode CircleCI OIDC Token
+          command: |
+            echo "🔍 Looking for CircleCI OIDC token..."
+            TOKEN=""
+
+            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
+              echo "✅ Found CIRCLE_OIDC_TOKEN_V2"
+              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
+            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
+              echo "✅ Found CIRCLE_OIDC_TOKEN_FILE"
+              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
+            elif [ -n "$CIRCLE_OIDC_TOKEN" ]; then
+              echo "✅ Found legacy CIRCLE_OIDC_TOKEN"
+              TOKEN="$CIRCLE_OIDC_TOKEN"
+            else
+              echo "❌ No OIDC token found in environment."
+              exit 1
+            fi
+
+            echo "----------------------------------------"
+            echo "🧠 Decoding OIDC claims (iss, aud, sub):"
+            echo "$TOKEN" | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq '{iss, aud, sub}'
+            echo "----------------------------------------"
 
       - run:
           name: 🧠 Verify AWS Identity
           command: |
             echo "🔍 Calling STS get-caller-identity..."
             aws sts get-caller-identity --profile oidc-test || {
-              echo "❌ Failed to assume role."
+              echo "❌ Failed to assume role. Check trust policy & audience."
               exit 1
             }
+            echo "✅ Successfully assumed AWS role via OIDC!"
 
 workflows:
   verify-oidc:
