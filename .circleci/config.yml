@@ -45,11 +45,16 @@ jobs:
 
       # 🧰 Install AWS CDK CLI globally (Node-based)
       - run:
-          name: 🧰 Install AWS CDK CLI
+          name: 🧰 Install AWS CDK CLI (user-space)
           command: |
             set -e
+            mkdir -p ~/.npm-global
+            npm config set prefix '~/.npm-global'
+            export PATH="$HOME/.npm-global/bin:$PATH"
+            echo 'export PATH=$HOME/.npm-global/bin:$PATH' >> $BASH_ENV
             npm install -g aws-cdk
             echo "✅ CDK CLI version: $(cdk --version)"
+
 
       # 💾 Save cache for faster builds
       - save_cache:
