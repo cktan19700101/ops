@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import aws_cdk as cdk
-from cdk.stacks.infra_stack import BaseStack
+from stacks.infra_stack import BaseStack
 
 app = cdk.App()
 
