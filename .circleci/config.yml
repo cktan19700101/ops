@@ -5,10 +5,10 @@ orbs:
   python: circleci/python@2.1.1
 
 jobs:
-  # 🚀 Universal CDK Deploy Job
+  # 🚀 Universal CDK Deploy Job (Python-only)
   deploy:
     docker:
-      - image: cimg/python:3.11-node
+      - image: cimg/python:3.11
     parameters:
       env:
         type: string
@@ -22,43 +22,37 @@ jobs:
           role_session_name: "circleci-deploy-<< parameters.env >>"
           region: "ap-southeast-1"
 
-      # ⚡ Restore cached npm + CDK CLI
+      # ⚡ Restore cached Python environment
       - restore_cache:
           keys:
-            - v1-cdk-cli
+            - v1-cdk-py-{{ checksum "cdk/requirements.txt" }}
+            - v1-cdk-py-
 
-      # 🧰 Install AWS CDK CLI (user-space, no root permission)
-      - run:
-          name: 🧰 Install AWS CDK CLI
-          command: |
-            mkdir -p ~/.local/bin
-            npm install aws-cdk@2 --prefix ~/.local
-            ~/.local/bin/cdk --version
-
-      # 💾 Save cache to speed up next run
-      - save_cache:
-          key: v1-cdk-cli
-          paths:
-            - ~/.npm
-            - ~/.local/lib/node_modules
-
-      # 🐍 Setup Python + venv
+      # 🐍 Setup Python & install CDK dependencies (includes CLI)
       - run:
           name: 🐍 Setup Python & install CDK dependencies
           command: |
             cd cdk
             python -m venv .venv
             . .venv/bin/activate
+            pip install --upgrade pip
             pip install -r requirements.txt
+            cdk --version
 
-      # 🚀 Deploy CDK stack with dynamic env
+      # 💾 Save cache for faster future builds
+      - save_cache:
+          key: v1-cdk-py-{{ checksum "cdk/requirements.txt" }}
+          paths:
+            - cdk/.venv
+
+      # 🚀 Deploy CDK stack with dynamic environment
       - run:
           name: 🚀 Deploy CDK stack (<< parameters.env >>)
           command: |
             cd cdk
             . .venv/bin/activate
-            ~/.local/bin/cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
-            ~/.local/bin/cdk deploy --require-approval never -c env=<< parameters.env >>
+            cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
+            cdk deploy --require-approval never -c env=<< parameters.env >>
 
 
 workflows:
