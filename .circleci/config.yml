@@ -8,20 +8,23 @@ jobs:
   # 🚀 Universal AWS CDK Deploy Job
   deploy:
     docker:
-      - image: cimg/python:3.11-node  # ✅ includes both Python & Node
+      - image: cimg/python:3.11-node
     parameters:
       env:
         type: string
         default: "dev"
+      region:
+        type: string
+        default: "ap-southeast-1"
 
     steps:
       - checkout
 
-      # 🧰 AWS OIDC role assumption (no static credentials)
+      # 🧰 AWS OIDC role assumption
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-deploy-<< parameters.env >>"
-          region: "ap-southeast-1"
+          region: "<< parameters.region >>"
 
       # ⚡ Restore Python & npm caches
       - restore_cache:
@@ -43,9 +46,9 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
 
-      # 🧰 Install AWS CDK CLI globally (Node-based)
+      # 🧰 Install AWS CDK CLI in user-space (no sudo)
       - run:
-          name: 🧰 Install AWS CDK CLI (user-space)
+          name: 🧰 Install AWS CDK CLI
           command: |
             set -e
             mkdir -p ~/.npm-global
@@ -55,8 +58,7 @@ jobs:
             npm install -g aws-cdk
             echo "✅ CDK CLI version: $(cdk --version)"
 
-
-      # 💾 Save cache for faster builds
+      # 💾 Save caches
       - save_cache:
           key: v2-cdk-py-{{ checksum "cdk/requirements.txt" }}
           paths:
@@ -66,7 +68,7 @@ jobs:
           paths:
             - ~/.npm
 
-      # 🚀 Deploy CDK stack dynamically based on environment
+      # 🚀 Deploy CDK stack dynamically
       - run:
           name: 🚀 Deploy CDK stack (<< parameters.env >>)
           command: |
@@ -74,6 +76,7 @@ jobs:
             cd cdk
             . .venv/bin/activate
 
+            export AWS_REGION="<< parameters.region >>"
             echo "🌎 Deploying environment: << parameters.env >>"
             echo "🧭 AWS Account: $AWS_ACCOUNT_ID"
             echo "📍 AWS Region: $AWS_REGION"
@@ -87,6 +90,7 @@ workflows:
       - deploy:
           name: deploy-dev
           env: dev
+          region: ap-southeast-1
       - hold-for-approval:
           type: approval
           requires:
@@ -94,5 +98,6 @@ workflows:
       - deploy:
           name: deploy-prod
           env: prod
+          region: ap-southeast-1
           requires:
             - hold-for-approval
