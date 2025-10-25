@@ -44,7 +44,7 @@ Resources:
             Action: sts:AssumeRoleWithWebIdentity
             Condition:
               StringEquals:
-                oidc.circleci.com/org/${CircleCIOrgId}:aud: "https://circleci.com"
+                oidc.circleci.com/org/${CircleCIOrgId}:aud: !Sub "${CircleCIOrgId}"
                 oidc.circleci.com/org/${CircleCIOrgId}:sub: !Sub "org/${CircleCIOrgId}/project/${CircleCIProjectId}/user/*"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AdministratorAccess

@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircleCI OIDC Infra Role for provisioning AWS resources via CDK
+
+Parameters:
+  CircleCIOrgId:
+    Type: String
+    Description: CircleCI Organization ID (required)
+  CircleCIProjectId:
+    Type: String
+    Description: CircleCI Project ID (required)
+
+Resources:
+  CircleCIInfraRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CircleCIInfraRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.circleci.com/org/${CircleCIOrgId}
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                # build key dynamically with Join
+                !Join 
+                  - ""
+                  - - "oidc.circleci.com/org/"
+                    - !Ref CircleCIOrgId
+                    - ":aud"
+                : !Ref CircleCIOrgId
+              StringLike:
+                !Join
+                  - ""
+                  - - "oidc.circleci.com/org/"
+                    - !Ref CircleCIOrgId
+                    - ":sub"
+                : !Sub org/${CircleCIOrgId}/project/${CircleCIProjectId}/user/*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      MaxSessionDuration: 3600
+      Description: CircleCI Infra role for provisioning CDK stacks and AWS resources
+
+Outputs:
+  InfraRoleArn:
+    Description: ARN of the CircleCI Infra Role
+    Value: !GetAtt CircleCIInfraRole.Arn

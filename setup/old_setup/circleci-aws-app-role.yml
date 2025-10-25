@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircleCI OIDC App Deployment Role for updating application resources
+
+Parameters:
+  CircleCIOrgId:
+    Type: String
+    Description: CircleCI Organization ID (required)
+  CircleCIProjectId:
+    Type: String
+    Description: CircleCI Project ID (required)
+
+Resources:
+  CircleCIAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CircleCIAppRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.circleci.com/org/${CircleCIOrgId}"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                !Sub "oidc.circleci.com/org/${CircleCIOrgId}:aud": !Ref CircleCIOrgId
+              StringLike:
+                !Sub "oidc.circleci.com/org/${CircleCIOrgId}:sub": !Sub "org/${CircleCIOrgId}/project/${CircleCIProjectId}/user/*"
+      Policies:
+        - PolicyName: CircleCIAppDeploymentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - s3:PutObject
+                  - s3:GetObject
+                  - ecs:UpdateService
+                  - cloudfront:CreateInvalidation
+                  - ssm:GetParameter
+                  - ssm:GetParametersByPath
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+      MaxSessionDuration: 3600
+      Description: CircleCI App deployment role with scoped permissions
+
+Outputs:
+  AppRoleArn:
+    Description: ARN of the CircleCI App Role
+    Value: !GetAtt CircleCIAppRole.Arn
