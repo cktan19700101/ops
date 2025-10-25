@@ -5,55 +5,76 @@ orbs:
   python: circleci/python@2.1.1
 
 jobs:
-  # 🚀 Universal CDK Deploy Job (Python-only)
+  # 🚀 Universal AWS CDK Deploy Job
   deploy:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.11-node  # ✅ includes both Python & Node
     parameters:
       env:
         type: string
         default: "dev"
+
     steps:
       - checkout
 
-      # 🧰 AWS OIDC role assumption
+      # 🧰 AWS OIDC role assumption (no static credentials)
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-deploy-<< parameters.env >>"
           region: "ap-southeast-1"
 
-      # ⚡ Restore cached Python environment
+      # ⚡ Restore Python & npm caches
       - restore_cache:
           keys:
-            - v1-cdk-py-{{ checksum "cdk/requirements.txt" }}
-            - v1-cdk-py-
+            - v2-cdk-py-{{ checksum "cdk/requirements.txt" }}
+            - v2-cdk-py-
+      - restore_cache:
+          keys:
+            - v2-npm-global-cache
 
-      # 🐍 Setup Python & install CDK dependencies (includes CLI)
+      # 🐍 Setup Python environment & install dependencies
       - run:
-          name: 🐍 Setup Python & install CDK dependencies
+          name: 🐍 Setup Python & install dependencies
           command: |
+            set -e
             cd cdk
             python -m venv .venv
             . .venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
-            cdk --version
 
-      # 💾 Save cache for faster future builds
+      # 🧰 Install AWS CDK CLI globally (Node-based)
+      - run:
+          name: 🧰 Install AWS CDK CLI
+          command: |
+            set -e
+            npm install -g aws-cdk
+            echo "✅ CDK CLI version: $(cdk --version)"
+
+      # 💾 Save cache for faster builds
       - save_cache:
-          key: v1-cdk-py-{{ checksum "cdk/requirements.txt" }}
+          key: v2-cdk-py-{{ checksum "cdk/requirements.txt" }}
           paths:
             - cdk/.venv
+      - save_cache:
+          key: v2-npm-global-cache
+          paths:
+            - ~/.npm
 
-      # 🚀 Deploy CDK stack with dynamic environment
+      # 🚀 Deploy CDK stack dynamically based on environment
       - run:
           name: 🚀 Deploy CDK stack (<< parameters.env >>)
           command: |
+            set -e
             cd cdk
             . .venv/bin/activate
+
+            echo "🌎 Deploying environment: << parameters.env >>"
+            echo "🧭 AWS Account: $AWS_ACCOUNT_ID"
+            echo "📍 AWS Region: $AWS_REGION"
+
             cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
             cdk deploy --require-approval never -c env=<< parameters.env >>
-
 
 workflows:
   deploy_pipeline:
