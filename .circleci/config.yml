@@ -5,82 +5,45 @@ orbs:
   python: circleci/python@2.1.1
 
 jobs:
-  # 🔍 1️⃣ OIDC verification job (unchanged)
-  test-oidc:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - run:
-          name: 🔧 Environment info
-          command: |
-            echo "ORG ID:      $CIRCLE_ORGANIZATION_ID"
-            echo "PROJECT ID:  $CIRCLE_PROJECT_ID"
-            echo "USER:        $CIRCLE_USERNAME"
-            echo "BRANCH:      $CIRCLE_BRANCH"
-            echo "--------------------------------------"
-      - run:
-          name: 🔑 Find CircleCI OIDC token
-          command: |
-            set -e
-            echo "🔍 Checking for OIDC token..."
-            if [ -n "$CIRCLE_OIDC_TOKEN_V2" ]; then
-              echo "✅ Found CIRCLE_OIDC_TOKEN_V2"
-              TOKEN="$CIRCLE_OIDC_TOKEN_V2"
-            elif [ -n "$CIRCLE_OIDC_TOKEN_FILE" ]; then
-              echo "✅ Found CIRCLE_OIDC_TOKEN_FILE"
-              TOKEN=$(cat "$CIRCLE_OIDC_TOKEN_FILE")
-            elif [ -n "$CIRCLE_OIDC_TOKEN" ]; then
-              echo "✅ Found legacy CIRCLE_OIDC_TOKEN"
-              TOKEN="$CIRCLE_OIDC_TOKEN"
-            else
-              echo "❌ No OIDC token found. Make sure your context has OIDC enabled."
-              exit 1
-            fi
-            echo "$TOKEN" > token.jwt
-      - run:
-          name: 🧠 Decode OIDC token
-          command: |
-            echo "--------------------------------------"
-            echo "🧠 Decoding iss, aud, sub claims..."
-            jq -R 'split(".")[1] | @base64d | fromjson | {iss,aud,sub}' token.jwt
-            echo "--------------------------------------"
-            echo "📜 Full payload (for debug only):"
-            jq -R 'split(".")[1] | @base64d | fromjson' token.jwt
-            echo "--------------------------------------"
-      - aws-cli/setup:
-          role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
-          role_session_name: "circleci-oidc-test"
-          region: "ap-southeast-1"
-          profile_name: "oidc-test"
-          session_duration: "3600"
-      - run:
-          name: 🧠 Verify AWS Identity (via orb)
-          command: |
-            echo "🔍 Verifying assumed AWS identity..."
-            aws sts get-caller-identity --profile oidc-test --region ap-southeast-1 || {
-              echo "❌ Failed to assume role via OIDC."
-              exit 1
-            }
-            echo "✅ Successfully assumed AWS role via CircleCI OIDC!"
-
-  # 🚀 2️⃣ Deploy to Dev (auto)
+  # 🚀 Deploy to Dev
   deploy-dev:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.11-node    # includes Python + npm
     steps:
       - checkout
+
+      # 🧰 AWS OIDC role assumption
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-deploy-dev"
           region: "ap-southeast-1"
+
+      # ⚡ Cache node_modules containing global CDK CLI
+      - restore_cache:
+          keys:
+            - v1-cdk-cli-{{ checksum "cdk/package.json" }}
+            - v1-cdk-cli-
+
       - run:
-          name: 🐍 Setup Python & install CDK
+          name: 🧰 Install AWS CDK CLI
+          command: |
+            npm install -g aws-cdk@2
+            cdk --version
+
+      - save_cache:
+          key: v1-cdk-cli-{{ checksum "cdk/package.json" }}
+          paths:
+            - ~/.npm
+
+      # 🐍 Setup Python + venv
+      - run:
+          name: 🐍 Setup Python & install CDK dependencies
           command: |
             cd cdk
             python -m venv .venv
             . .venv/bin/activate
             pip install -r requirements.txt
+
       - run:
           name: 🚀 Deploy CDK stack (dev)
           command: |
@@ -89,23 +52,37 @@ jobs:
             cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
             cdk deploy --require-approval never -c env=dev
 
-  # 🚀 3️⃣ Deploy to Prod (manual approval gate)
+
+  # 🚀 Deploy to Prod (after approval)
   deploy-prod:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.11-node
     steps:
       - checkout
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
           role_session_name: "circleci-deploy-prod"
           region: "ap-southeast-1"
+
+      - restore_cache:
+          keys:
+            - v1-cdk-cli-{{ checksum "cdk/package.json" }}
+            - v1-cdk-cli-
+
       - run:
-          name: 🐍 Setup Python & install CDK
+          name: 🧰 Install AWS CDK CLI
+          command: |
+            npm install -g aws-cdk@2
+            cdk --version
+
+      - run:
+          name: 🐍 Setup Python & install CDK dependencies
           command: |
             cd cdk
             python -m venv .venv
             . .venv/bin/activate
             pip install -r requirements.txt
+
       - run:
           name: 🚀 Deploy CDK stack (prod)
           command: |
@@ -114,15 +91,11 @@ jobs:
             cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
             cdk deploy --require-approval never -c env=prod
 
+
 workflows:
   deploy_pipeline:
     jobs:
-      - test-oidc:
-          context: my-oidc-enabled-context
-      - deploy-dev:
-          requires:
-            - test-oidc
-          context: my-oidc-enabled-context
+      - deploy-dev
       - hold-for-approval:
           type: approval
           requires:
@@ -130,4 +103,3 @@ workflows:
       - deploy-prod:
           requires:
             - hold-for-approval
-          context: my-oidc-enabled-context
