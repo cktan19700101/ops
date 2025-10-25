@@ -18,22 +18,26 @@ jobs:
           role_session_name: "circleci-deploy-dev"
           region: "ap-southeast-1"
 
-      # ⚡ Cache node_modules containing global CDK CLI
+      # ⚡ Restore cached CDK CLI + npm packages
       - restore_cache:
           keys:
-            - v1-cdk-cli-{{ checksum "cdk/package.json" }}
-            - v1-cdk-cli-
+            - v1-cdk-cli
 
+      # 🧰 Install AWS CDK CLI (user space, no root permission)
       - run:
           name: 🧰 Install AWS CDK CLI
           command: |
-            npm install -g aws-cdk@2
+            mkdir -p ~/.local/bin
+            npm install aws-cdk@2 --prefix ~/.local
+            export PATH=$PATH:~/.local/bin
             cdk --version
 
+      # 💾 Save cache to speed up next run
       - save_cache:
-          key: v1-cdk-cli-{{ checksum "cdk/package.json" }}
+          key: v1-cdk-cli
           paths:
             - ~/.npm
+            - ~/.local/lib/node_modules
 
       # 🐍 Setup Python + venv
       - run:
@@ -44,9 +48,11 @@ jobs:
             . .venv/bin/activate
             pip install -r requirements.txt
 
+      # 🚀 Deploy Dev Stack
       - run:
           name: 🚀 Deploy CDK stack (dev)
           command: |
+            export PATH=$PATH:~/.local/bin
             cd cdk
             . .venv/bin/activate
             cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
@@ -59,47 +65,8 @@ jobs:
       - image: cimg/python:3.11-node
     steps:
       - checkout
+
+      # 🧰 AWS OIDC role assumption
       - aws-cli/setup:
           role_arn: "arn:aws:iam::056198491146:role/CircleCIInfraRole"
-          role_session_name: "circleci-deploy-prod"
-          region: "ap-southeast-1"
-
-      - restore_cache:
-          keys:
-            - v1-cdk-cli-{{ checksum "cdk/package.json" }}
-            - v1-cdk-cli-
-
-      - run:
-          name: 🧰 Install AWS CDK CLI
-          command: |
-            npm install -g aws-cdk@2
-            cdk --version
-
-      - run:
-          name: 🐍 Setup Python & install CDK dependencies
-          command: |
-            cd cdk
-            python -m venv .venv
-            . .venv/bin/activate
-            pip install -r requirements.txt
-
-      - run:
-          name: 🚀 Deploy CDK stack (prod)
-          command: |
-            cd cdk
-            . .venv/bin/activate
-            cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
-            cdk deploy --require-approval never -c env=prod
-
-
-workflows:
-  deploy_pipeline:
-    jobs:
-      - deploy-dev
-      - hold-for-approval:
-          type: approval
-          requires:
-            - deploy-dev
-      - deploy-prod:
-          requires:
-            - hold-for-approval
+          role_session_name: "cir
