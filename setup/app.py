@@ -24,3 +24,7 @@ CircleCIRolesStack(
 )
 
 app.synth()
+
+# cdk deploy \
+#   -c circleci_org_id=\
+#   -c circleci_project_id=

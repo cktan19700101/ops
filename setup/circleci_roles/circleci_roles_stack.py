@@ -87,9 +87,15 @@ class CircleCIRolesStack(Stack):
                     ]
                 )
             },
+            # ✅ Attach AWS managed policies for full API Gateway & DynamoDB access
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonAPIGatewayAdministrator"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonDynamoDBFullAccess"),
+            ],
             max_session_duration=Duration.hours(1),
             description="CircleCI App deployment role with scoped permissions"
         )
+        
 
         # --- 5️⃣ Outputs ---
         self.infra_role_arn = infra_role.role_arn

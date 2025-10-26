@@ -70,7 +70,7 @@ jobs:
 
       # 🚀 Deploy CDK stack dynamically
       - run:
-          name: 🚀 Deploy CDK stack (<< parameters.env >>)
+          name: 🚀 Deploy CDK Stack (<< parameters.env >>)
           command: |
             set -e
             cd cdk
@@ -91,13 +91,18 @@ workflows:
           name: deploy-dev
           env: dev
           region: ap-southeast-1
+
       - hold-for-approval:
           type: approval
           requires:
             - deploy-dev
+
       - deploy:
           name: deploy-prod
           env: prod
           region: ap-southeast-1
           requires:
             - hold-for-approval
+          filters:
+            branches:
+              only: [main]
