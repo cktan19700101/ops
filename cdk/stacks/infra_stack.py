@@ -24,7 +24,7 @@ class BaseStack(Stack):
         log_bucket_name = f"{env_name}-log-bucket-{account}"
 
         nat_gateways = int(
-            self.node.try_get_context("nat_gateways") or os.getenv("NAT_GATEWAYS", "1")
+            self.node.try_get_context("nat_gateways") or os.getenv("NAT_GATEWAYS", "0")
         )
 
         # --- 1. VPC (for Batch, API Gateway, EC2) ---

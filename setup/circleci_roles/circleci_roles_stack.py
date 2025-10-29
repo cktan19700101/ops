@@ -9,7 +9,7 @@ from constructs import Construct
 class CircleCIRolesStack(Stack):
     def __init__(self, scope: Construct, construct_id: str,
                  org_id: str,
-                 project_id: str,
+                #  project_id: str,
                  restrict_to_project: bool = True,
                  **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -32,11 +32,11 @@ class CircleCIRolesStack(Stack):
             }
         }
 
-        if restrict_to_project:
-            conditions["StringLike"] = {
-                f"oidc.circleci.com/org/{org_id}:sub":
-                    f"org/{org_id}/project/{project_id}/user/*"
-            }
+        # if restrict_to_project:
+        #     conditions["StringLike"] = {
+        #         f"oidc.circleci.com/org/{org_id}:sub":
+        #             f"org/{org_id}/project/{project_id}/user/*"
+        #     }
 
         trust_principal = iam.FederatedPrincipal(
             federated=provider_arn,
@@ -91,6 +91,7 @@ class CircleCIRolesStack(Stack):
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonAPIGatewayAdministrator"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonDynamoDBFullAccess"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2FullAccess"), # For VPC access if needed
             ],
             max_session_duration=Duration.hours(1),
             description="CircleCI App deployment role with scoped permissions"
